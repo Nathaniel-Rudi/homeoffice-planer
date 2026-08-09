@@ -1,0 +1,1628 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<!-- Sorgt dafür, dass die Seite auf dem Handy nicht "verkleinert" aussieht -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Homeoffice-Planer</title>
+
+<style>
+  /* ---------- Grundlegende Farben & Schrift ---------- */
+  :root {
+    --bg: #f4f5f7;
+    --card-bg: #ffffff;
+    --text: #1f2430;
+    --text-muted: #6b7280;
+    --accent: #4f6bfe;
+    --accent-soft: #e8ecff;
+    --border: #e4e6eb;
+
+    /* ---------- Status-Farben (zentral an einer Stelle) ----------
+       Wenn sich eine Farbe mal ändern soll, reicht es, sie hier anzupassen -
+       der Rest des CSS greift überall nur auf diese Variablen zu. */
+    --status-buero: #d1d5db;      /* neutral/grau, Standardzustand */
+    --status-homeoffice: #4f6bfe; /* Blau */
+    --status-urlaub: #22c55e;     /* Grün */
+    --status-gleitzeit: #f97316;  /* Orange */
+    --status-krank: #ec4899;      /* Pink */
+    --status-feiertag: #ef4444;   /* Rot */
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding: 24px 16px 60px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    justify-content: center;
+  }
+
+  /* Die "Karte", in der die App lebt. Max-Breite sorgt dafür, dass es
+     auf einem großen Bildschirm nicht ewig breit auseinandergezogen wird. */
+  .app {
+    width: 100%;
+    max-width: 420px;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin: 0 0 16px;
+  }
+
+  /* ---------- "Wer bist du?"-Auswahl ---------- */
+  .who-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 0 20px;
+  }
+
+  .who-label {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .who-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .who-btn {
+    padding: 7px 14px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border);
+    background: #ffffff;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .who-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+  }
+
+  .card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.04);
+  }
+
+  .card + .card {
+    margin-top: 20px;
+  }
+
+  .card-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 2px;
+  }
+
+  /* ---------- Wochen-Navigation (Pfeile links/rechts vom Datum) ---------- */
+  .week-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin: 0 0 4px;
+  }
+
+  .week-range {
+    font-size: 13px;
+    color: var(--text-muted);
+    min-width: 110px;
+    text-align: center;
+  }
+
+  .nav-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .nav-btn:active {
+    background: var(--accent-soft);
+  }
+
+  .jump-today {
+    display: block;
+    margin: 0 auto 16px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  /* ---------- Status-Picker ("Pinsel": welchen Status trage ich gerade ein?) ---------- */
+  .status-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 16px;
+  }
+
+  .status-btn {
+    flex: 1 1 45%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 8px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border);
+    background: #ffffff;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .status-btn .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .status-btn[data-status="homeoffice"] .dot { background: var(--status-homeoffice); }
+  .status-btn[data-status="urlaub"] .dot     { background: var(--status-urlaub); }
+  .status-btn[data-status="gleitzeit"] .dot  { background: var(--status-gleitzeit); }
+  .status-btn[data-status="krank"] .dot      { background: var(--status-krank); }
+
+  /* Der gerade aktive Status-Button wird komplett in seiner Farbe eingefärbt */
+  .status-btn.active[data-status="homeoffice"] { background: var(--status-homeoffice); border-color: var(--status-homeoffice); color: #fff; }
+  .status-btn.active[data-status="urlaub"]     { background: var(--status-urlaub);     border-color: var(--status-urlaub);     color: #fff; }
+  .status-btn.active[data-status="gleitzeit"]  { background: var(--status-gleitzeit);  border-color: var(--status-gleitzeit);  color: #fff; }
+  .status-btn.active[data-status="krank"]      { background: var(--status-krank);      border-color: var(--status-krank);      color: #fff; }
+  .status-btn.active .dot { background: #ffffff; }
+
+  /* ---------- Die fünf Wochentag-Buttons ---------- */
+  .day-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .day-btn {
+    position: relative;
+    flex: 1;
+    padding: 14px 0;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.05s ease;
+  }
+
+  .day-btn:active {
+    transform: scale(0.96);
+  }
+
+  /* ---------- Deaktivierter Zustand, solange niemand "Wer bist du?" gewählt hat ---------- */
+  .day-btn:disabled,
+  .status-btn:disabled,
+  .save-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* ---------- Speichern-Button ---------- */
+  .save-btn {
+    display: block;
+    width: 100%;
+    margin-top: 18px;
+    padding: 13px 0;
+    border: none;
+    border-radius: 12px;
+    background: var(--accent);
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .save-btn:active {
+    transform: scale(0.98);
+  }
+
+  .save-status {
+    text-align: center;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--status-urlaub);
+    margin: 8px 0 0;
+    min-height: 16px;
+  }
+
+  /* Jede Status-Klasse färbt den Tag-Button in "ihrer" Farbe.
+     .status-buero bekommt bewusst keine eigene Regel - das ist der
+     neutrale Ausgangszustand, den .day-btn schon mitbringt. */
+  .day-btn.status-homeoffice { background: var(--status-homeoffice); border-color: var(--status-homeoffice); color: #fff; }
+  .day-btn.status-urlaub     { background: var(--status-urlaub);     border-color: var(--status-urlaub);     color: #fff; }
+  .day-btn.status-gleitzeit  { background: var(--status-gleitzeit);  border-color: var(--status-gleitzeit);  color: #fff; }
+  .day-btn.status-krank      { background: var(--status-krank);      border-color: var(--status-krank);      color: #fff; }
+  .day-btn.status-feiertag   { background: var(--status-feiertag);   border-color: var(--status-feiertag);   color: #fff; }
+
+  /* Kleiner "½"-Hinweis oben rechts auf dem Tag-Button - nur bei Personen,
+     für die dieser Tag laut HALF_DAY_DATES ein halber Arbeitstag ist. */
+  .day-btn.half-day::after {
+    content: "½";
+    position: absolute;
+    top: 3px;
+    right: 6px;
+    font-size: 9px;
+    font-weight: 700;
+    opacity: 0.75;
+  }
+
+  .half-day-note {
+    display: none;
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin: 10px 0 0;
+  }
+
+  /* ---------- Monatsübersicht ---------- */
+  .month-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin: 0 0 16px;
+  }
+
+  .month-label {
+    font-size: 13px;
+    color: var(--text-muted);
+    min-width: 110px;
+    text-align: center;
+  }
+
+  .month-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+
+  .month-weekday {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding-bottom: 4px;
+  }
+
+  .month-cell {
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border-radius: 8px;
+    background: var(--bg);
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  /* Tage außerhalb des angezeigten Monats oder am Wochenende: nur schwach sichtbar */
+  .month-cell.outside,
+  .month-cell.weekend {
+    color: var(--text-muted);
+    opacity: 0.45;
+  }
+
+  .month-cell .status-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    /* Immer Platz reservieren, damit die Tageszahl nicht springt -
+       ist kein Status gesetzt, machen wir den Punkt einfach unsichtbar. */
+    opacity: 0;
+  }
+
+  .month-cell .status-dot.status-homeoffice,
+  .month-cell .status-dot.status-urlaub,
+  .month-cell .status-dot.status-gleitzeit,
+  .month-cell .status-dot.status-krank,
+  .month-cell .status-dot.status-feiertag {
+    opacity: 1;
+  }
+
+  .month-cell .status-dot.status-homeoffice { background: var(--status-homeoffice); }
+  .month-cell .status-dot.status-urlaub     { background: var(--status-urlaub); }
+  .month-cell .status-dot.status-gleitzeit  { background: var(--status-gleitzeit); }
+  .month-cell .status-dot.status-krank      { background: var(--status-krank); }
+  .month-cell .status-dot.status-feiertag   { background: var(--status-feiertag); }
+
+  /* ---------- Nextcloud-Synchronisation ----------
+     <details>/<summary> ist ein natives HTML-Element für "aufklappbar" -
+     dafür brauchen wir gar kein JavaScript, der Browser kann das von Haus aus. */
+  details.card {
+    padding: 20px;
+  }
+
+  details.card summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  /* Entfernt das Standard-Dreieck vor der Überschrift (Safari/Chrome) */
+  details.card summary::-webkit-details-marker {
+    display: none;
+  }
+
+  details.card summary::after {
+    content: "▾";
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
+  }
+
+  details.card[open] summary::after {
+    transform: rotate(180deg);
+  }
+
+  .settings-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .settings-body label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .settings-body input {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+  }
+
+  .settings-body input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .settings-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .settings-btn {
+    flex: 1;
+    padding: 10px 0;
+    border-radius: 10px;
+    border: 1.5px solid var(--border);
+    background: #ffffff;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .settings-btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+  }
+
+  .settings-status {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin: 2px 0 0;
+    min-height: 16px;
+  }
+
+  .settings-status.success { color: var(--status-urlaub); }
+  .settings-status.error   { color: var(--status-feiertag); }
+
+  /* ---------- Auswertung (kumulierte Monats-/Jahresübersicht) ---------- */
+  .stats-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 12px;
+  }
+
+  .stats-tab {
+    flex: 1;
+    padding: 8px 0;
+    border-radius: 10px;
+    border: 1.5px solid var(--border);
+    background: #ffffff;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .stats-tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+  }
+
+  .stats-period {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0 0 14px;
+  }
+
+  .stats-table {
+    display: grid;
+    grid-template-columns: 1fr 60px 60px;
+    row-gap: 10px;
+    align-items: center;
+  }
+
+  .stats-header {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  .stats-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .stats-label .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .stats-label .dot.status-buero      { background: var(--status-buero); }
+  .stats-label .dot.status-homeoffice { background: var(--status-homeoffice); }
+  .stats-label .dot.status-urlaub     { background: var(--status-urlaub); }
+  .stats-label .dot.status-gleitzeit  { background: var(--status-gleitzeit); }
+  .stats-label .dot.status-krank      { background: var(--status-krank); }
+  .stats-label .dot.status-feiertag   { background: var(--status-feiertag); }
+
+  .stats-value {
+    font-size: 13px;
+    text-align: center;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Summenzeile "Gesamt gearbeitete Tage" - optisch von den Status-Zeilen abgesetzt */
+  .stats-total-row {
+    font-weight: 700;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+
+  /* ---------- Legende unter der Monatsübersicht ---------- */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    margin-top: 14px;
+    font-size: 11.5px;
+    color: var(--text-muted);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .legend-item .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .legend-item .dot.status-homeoffice { background: var(--status-homeoffice); }
+  .legend-item .dot.status-urlaub     { background: var(--status-urlaub); }
+  .legend-item .dot.status-gleitzeit  { background: var(--status-gleitzeit); }
+  .legend-item .dot.status-krank      { background: var(--status-krank); }
+  .legend-item .dot.status-feiertag   { background: var(--status-feiertag); }
+</style>
+</head>
+<body>
+
+  <div class="app">
+    <h1>🏠 Homeoffice-Planer</h1>
+    <p class="subtitle">Wähle deinen Status für jeden Wochentag</p>
+
+    <!-- Legt fest, wessen Zeile gerade bearbeitet wird - wird im Browser gemerkt -->
+    <div class="who-row">
+      <span class="who-label">Wer bist du?</span>
+      <div class="who-buttons">
+        <button class="who-btn" data-who="Daniel">Daniel</button>
+        <button class="who-btn" data-who="Simone">Simone</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="card-title">Woche</p>
+
+      <!-- Pfeile zum Vor-/Zurückblättern, Datum in der Mitte -->
+      <div class="week-nav">
+        <button class="nav-btn" id="prev-week" aria-label="Vorherige Woche">‹</button>
+        <p class="week-range" id="week-range"></p>
+        <button class="nav-btn" id="next-week" aria-label="Nächste Woche">›</button>
+      </div>
+
+      <!-- Nur sichtbar, wenn man nicht auf der aktuellen Woche steht -->
+      <button class="jump-today" id="jump-today">Zur aktuellen Woche</button>
+
+      <!-- Status-Picker: erst hier den gewünschten Status wählen ("Pinsel"),
+           danach unten die betroffenen Tage anklicken. -->
+      <div class="status-picker">
+        <button class="status-btn active" data-status="homeoffice"><span class="dot"></span>Homeoffice</button>
+        <button class="status-btn" data-status="urlaub"><span class="dot"></span>Urlaub</button>
+        <button class="status-btn" data-status="gleitzeit"><span class="dot"></span>Gleitzeit</button>
+        <button class="status-btn" data-status="krank"><span class="dot"></span>Krank</button>
+      </div>
+
+      <!-- Jeder Button trägt in data-day, um welchen Wochentag es geht. -->
+      <div class="day-buttons">
+        <button class="day-btn" data-day="Mo">Mo</button>
+        <button class="day-btn" data-day="Di">Di</button>
+        <button class="day-btn" data-day="Mi">Mi</button>
+        <button class="day-btn" data-day="Do">Do</button>
+        <button class="day-btn" data-day="Fr">Fr</button>
+      </div>
+
+      <!-- Nur sichtbar, wenn diese Woche für die aktuelle Person einen
+           halben Arbeitstag enthält (Heiligabend/Silvester) -->
+      <p class="half-day-note" id="half-day-note">½ = halber Arbeitstag bei dir (Heiligabend/Silvester)</p>
+
+      <!-- Persistiert die Eingaben erst auf Klick, nicht bei jedem einzelnen Tap -->
+      <button class="save-btn" id="save-btn">Speichern</button>
+      <p class="save-status" id="save-status"></p>
+    </div>
+
+    <div class="card">
+      <p class="card-title">Monatsübersicht</p>
+
+      <div class="month-nav">
+        <button class="nav-btn" id="prev-month" aria-label="Vorheriger Monat">‹</button>
+        <p class="month-label" id="month-label"></p>
+        <button class="nav-btn" id="next-month" aria-label="Nächster Monat">›</button>
+      </div>
+
+      <!-- Wird per JavaScript mit den Tages-Kacheln des Monats gefüllt -->
+      <div class="month-grid" id="month-grid"></div>
+
+      <div class="legend">
+        <span class="legend-item"><span class="dot status-homeoffice"></span>Homeoffice</span>
+        <span class="legend-item"><span class="dot status-urlaub"></span>Urlaub</span>
+        <span class="legend-item"><span class="dot status-gleitzeit"></span>Gleitzeit</span>
+        <span class="legend-item"><span class="dot status-krank"></span>Krank</span>
+        <span class="legend-item"><span class="dot status-feiertag"></span>Feiertag</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="card-title">Auswertung</p>
+
+      <!-- Umschalter zwischen kumulierter Monats- und Jahresansicht -->
+      <div class="stats-tabs">
+        <button class="stats-tab active" data-range="month">Monat</button>
+        <button class="stats-tab" data-range="year">Jahr</button>
+      </div>
+
+      <p class="stats-period" id="stats-period"></p>
+
+      <!-- Wird per JavaScript mit Kopfzeile + einer Zeile pro Status gefüllt -->
+      <div class="stats-table" id="stats-table"></div>
+    </div>
+
+    <!-- Zugeklappt per Default (kein "open"-Attribut) - Zugangsdaten landen
+         nur in localStorage auf diesem Gerät, nie im Code/Git. -->
+    <details class="card">
+      <summary>⚙️ Nextcloud-Synchronisation</summary>
+
+      <div class="settings-body">
+        <label>
+          Server-URL
+          <input type="url" id="nc-url" placeholder="https://cloud.beispiel.de" autocomplete="off">
+        </label>
+        <label>
+          Benutzername
+          <input type="text" id="nc-username" placeholder="dani" autocomplete="off">
+        </label>
+        <label>
+          App-Passwort
+          <input type="password" id="nc-password" placeholder="xxxxx-xxxxx-xxxxx-xxxxx-xxxxx" autocomplete="off">
+        </label>
+
+        <div class="settings-actions">
+          <button class="settings-btn" id="nc-test-btn" type="button">Verbindung testen</button>
+          <button class="settings-btn settings-btn-primary" id="nc-save-btn" type="button">Zugangsdaten speichern</button>
+        </div>
+
+        <p class="settings-status" id="nc-status"></p>
+      </div>
+    </details>
+  </div>
+
+<script>
+  // ================================================================
+  // Hilfsfunktionen rund um Datum/Woche
+  // ================================================================
+
+  // new Date() gibt uns "jetzt" (wie datetime.now() in Python).
+  // getDay() liefert den Wochentag als Zahl: 0 = Sonntag, 1 = Montag, ... 6 = Samstag.
+  // Das ist etwas unpraktisch, weil die Woche bei uns ja mit Montag beginnen soll.
+  function getMonday(date) {
+    const day = date.getDay();
+    // Ist heute Sonntag (0), müssen wir 6 Tage zurück, sonst (day - 1) Tage zurück.
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+
+    // Wir bauen ein neues Date-Objekt, damit wir das übergebene "date"
+    // nicht versehentlich verändern (in JS werden Date-Objekte sonst wie
+    // veränderliche Listen in Python behandelt, nicht wie unveränderliche Werte).
+    const monday = new Date(date);
+    monday.setDate(date.getDate() + diffToMonday);
+    return monday;
+  }
+
+  // Formatiert ein Date-Objekt als "TT.MM", z.B. "27.07"
+  function formatDayMonth(date) {
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0"); // Monate sind 0-basiert!
+    return day + "." + month;
+  }
+
+  // Formatiert ein Date-Objekt als "YYYY-MM-DD", z.B. "2026-07-27".
+  // Das benutzen wir als eindeutigen Schlüssel für "welche Woche ist das".
+  function formatISODate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return year + "-" + month + "-" + day;
+  }
+
+  // Wandelt getDay() (0=So .. 6=Sa) in unsere deutschen Kürzel um.
+  const WEEKDAY_LABELS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+
+  const MONTH_NAMES = [
+    "Januar", "Februar", "März", "April", "Mai", "Juni",
+    "Juli", "August", "September", "Oktober", "November", "Dezember"
+  ];
+
+  // ================================================================
+  // Gesetzliche Feiertage (Baden-Württemberg)
+  // ================================================================
+  //
+  // Werden berechnet statt von Hand gepflegt, damit sie in jedem Jahr
+  // automatisch stimmen - auch für beweglichen Feiertage wie Ostern.
+
+  // "YYYY-MM-DD" von Hand in ein Date-Objekt zerlegen, statt new Date(text)
+  // zu benutzen - so vermeiden wir Zeitzonen-Überraschungen (new Date(text)
+  // interpretiert den Text sonst als UTC-Mitternacht, was je nach Zeitzone
+  // auf den Vortag "zurückrutschen" kann).
+  function parseISODate(text) {
+    const parts = text.split("-");
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  }
+
+  const WEEKDAY_ORDER = ["Mo", "Di", "Mi", "Do", "Fr"]; // Reihenfolge relativ zum Montag
+
+  // Berechnet das Datum von Ostersonntag für ein Jahr (Gauß'sche Osterformel).
+  // Daraus lassen sich alle beweglichen Feiertage ableiten (z.B. Karfreitag
+  // = 2 Tage vorher, Fronleichnam = 60 Tage danach).
+  function computeEasterSunday(year) {
+    const a = year % 19;
+    const b = Math.floor(year / 100);
+    const c = year % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31); // 3 = März, 4 = April
+    const day = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(year, month - 1, day);
+  }
+
+  // Merkt sich die berechneten Feiertage pro Jahr, damit wir nicht bei
+  // jedem Neuzeichnen erneut rechnen müssen.
+  const holidayCache = {};
+
+  function getHolidaysForYear(year) {
+    if (holidayCache[year]) return holidayCache[year];
+
+    const easter = computeEasterSunday(year);
+    function daysAfterEaster(offset) {
+      const d = new Date(easter);
+      d.setDate(d.getDate() + offset);
+      return d;
+    }
+
+    holidayCache[year] = [
+      { date: new Date(year, 0, 1), name: "Neujahr" },
+      { date: new Date(year, 0, 6), name: "Heilige Drei Könige" },
+      { date: daysAfterEaster(-2), name: "Karfreitag" },
+      { date: daysAfterEaster(1), name: "Ostermontag" },
+      { date: new Date(year, 4, 1), name: "Tag der Arbeit" },
+      { date: daysAfterEaster(39), name: "Christi Himmelfahrt" },
+      { date: daysAfterEaster(50), name: "Pfingstmontag" },
+      { date: daysAfterEaster(60), name: "Fronleichnam" },
+      { date: new Date(year, 9, 3), name: "Tag der Deutschen Einheit" },
+      { date: new Date(year, 10, 1), name: "Allerheiligen" },
+      { date: new Date(year, 11, 25), name: "1. Weihnachtsfeiertag" },
+      { date: new Date(year, 11, 26), name: "2. Weihnachtsfeiertag" }
+    ];
+    return holidayCache[year];
+  }
+
+  // Gibt den Feiertagsnamen zurück, wenn "date" ein Feiertag ist, sonst null.
+  function getHolidayName(date) {
+    const holidays = getHolidaysForYear(date.getFullYear());
+    const match = holidays.find(function (holiday) {
+      return holiday.date.getMonth() === date.getMonth() && holiday.date.getDate() === date.getDate();
+    });
+    return match ? match.name : null;
+  }
+
+  // Formatiert ein Datum als "MM-DD" (ohne Jahr) - für Listen wie
+  // HALF_DAY_DATES/EXTRA_FULL_HOLIDAYS, die jedes Jahr gleich gelten sollen.
+  function monthDayKey(date) {
+    return String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+  }
+
+  // Heiligabend und Silvester sind keine gesetzlichen Feiertage. Bei Daniel
+  // im Geschäft sind es halbe Arbeitstage (nur ein Hinweis-Badge, der Status
+  // bleibt frei wählbar). Bei Simone sind es ganze Feiertage (siehe unten).
+  const HALF_DAY_DATES = {
+    Daniel: ["12-24", "12-31"],
+    Simone: []
+  };
+
+  function isHalfDayForCurrentUser(date) {
+    if (!currentUser) return false;
+    return (HALF_DAY_DATES[currentUser] || []).indexOf(monthDayKey(date)) !== -1;
+  }
+
+  // Zusätzliche, ganz persönliche Feiertage pro Person (kein gesetzlicher
+  // Feiertag, gilt also nicht für alle) - bei Simone sind Heiligabend und
+  // Silvester komplett frei.
+  const EXTRA_FULL_HOLIDAYS = {
+    Simone: ["12-24", "12-31"]
+  };
+
+  function isExtraHolidayForPerson(date, person) {
+    if (!person) return false;
+    return (EXTRA_FULL_HOLIDAYS[person] || []).indexOf(monthDayKey(date)) !== -1;
+  }
+
+  // Der Status, den ein Tag "von Natur aus" für eine Person hat, solange
+  // niemand etwas anderes eingetragen hat: an Feiertagen "feiertag" (egal
+  // ob gesetzlich oder persönlich wie bei Simones Heiligabend), sonst "buero".
+  function getDefaultStatus(date, person) {
+    if (getHolidayName(date) || isExtraHolidayForPerson(date, person)) {
+      return "feiertag";
+    }
+    return "buero";
+  }
+
+  // Feiertage (gesetzlich oder persönlich) dürfen nicht überschrieben werden -
+  // diese Funktion sagt, ob ein Tag für eine Person gesperrt ist.
+  function isHolidayLockedForPerson(date, person) {
+    return Boolean(getHolidayName(date) || isExtraHolidayForPerson(date, person));
+  }
+
+  // Rechnet ein Wochentag-Kürzel ("Mo".."Fr") innerhalb einer Woche
+  // (weekKey = Montags-Datum als Text) in das passende Kalenderdatum um.
+  function dateForWeekdayInWeek(weekKey, dayLabel) {
+    const monday = parseISODate(weekKey);
+    const offset = WEEKDAY_ORDER.indexOf(dayLabel);
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + offset);
+    return date;
+  }
+
+  // ================================================================
+  // Datenmodell
+  // ================================================================
+  //
+  // weekData sammelt alle Wochen, die diese App schon gesehen hat.
+  // Schlüssel = Montags-Datum der Woche als Text (z.B. "2026-07-27"),
+  // Wert = ein Objekt PRO PERSON mit einem Status-Text pro Wochentag.
+  // In Python etwa:
+  //   weekData = {"2026-07-27": {"Daniel": {"Mo": "buero", ...},
+  //                               "Simone": {"Mo": "buero", ...}}}
+  //
+  // So kann später (Nextcloud) dieselbe Datei die Einträge von beiden
+  // enthalten, ohne dass sich Daniel und Simone gegenseitig überschreiben.
+  const weekData = {};
+
+  // Baut die Standard-Statuswerte einer Woche für eine bestimmte Person -
+  // jeder Tag bekommt "buero", außer es ist (für diese Person) ein
+  // Feiertag, dann "feiertag" (siehe getDefaultStatus oben).
+  function defaultDayStatuses(weekKey, person) {
+    const result = {};
+    WEEKDAY_ORDER.forEach(function (dayLabel) {
+      result[dayLabel] = getDefaultStatus(dateForWeekdayInWeek(weekKey, dayLabel), person);
+    });
+    return result;
+  }
+
+  // Gibt die Statusdaten einer Person für eine Woche zurück - legt sie an,
+  // falls sie noch nicht existieren.
+  function getOrCreatePersonWeek(weekKey, person) {
+    if (!weekData[weekKey]) {
+      weekData[weekKey] = {};
+    }
+    if (!weekData[weekKey][person]) {
+      weekData[weekKey][person] = defaultDayStatuses(weekKey, person);
+    }
+    return weekData[weekKey][person];
+  }
+
+  // Liefert den Status einer Person an einem beliebigen Kalendertag,
+  // oder null am Wochenende bzw. wenn noch niemand ausgewählt ist.
+  function getStatusForDate(date, person) {
+    const dayIndex = date.getDay();
+    if (dayIndex === 0 || dayIndex === 6 || !person) {
+      return null; // Samstag/Sonntag - dafür führen wir keinen Status
+    }
+    const dayLabel = WEEKDAY_LABELS[dayIndex];
+    const weekKey = formatISODate(getMonday(date));
+    const week = weekData[weekKey];
+    const personWeek = week ? week[person] : null;
+    return personWeek ? personWeek[dayLabel] : getDefaultStatus(date, person);
+  }
+
+  // ================================================================
+  // Lokales Speichern (localStorage)
+  // ================================================================
+  //
+  // localStorage ist ein einfacher Key-Value-Speicher im Browser, der auch
+  // nach dem Schließen der Seite erhalten bleibt (anders als eine normale
+  // Variable). Er kann nur Text speichern, deshalb JSON.stringify/JSON.parse
+  // zum Umwandeln zwischen JS-Objekt und Text.
+  const WHO_STORAGE_KEY = "hoplaner-wer-bin-ich";
+  const DATA_STORAGE_KEY = "hoplaner-daten";
+
+  // Feste Reihenfolge, in der die beiden in der Wochentabelle erscheinen.
+  const PEOPLE = ["Daniel", "Simone"];
+
+  function loadDataFromStorage() {
+    const raw = localStorage.getItem(DATA_STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      // Object.assign kopiert die geladenen Wochen in unser bestehendes
+      // weekData-Objekt hinein (weekData bleibt dabei dasselbe Objekt,
+      // wir überschreiben nur seinen Inhalt).
+      Object.assign(weekData, parsed);
+    } catch (error) {
+      console.error("Gespeicherte Daten konnten nicht gelesen werden:", error);
+    }
+  }
+
+  function saveDataToStorage() {
+    localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(weekData));
+  }
+
+  // ================================================================
+  // Nextcloud-Synchronisation (WebDAV)
+  // ================================================================
+  //
+  // Pro Jahr liegt eine Datei "homeoffice-<Jahr>.json" im Ordner
+  // "Homeoffice-Planer" des Benutzers - dieser Ordner muss in Nextcloud
+  // bereits existieren, WebDAV legt ihn nicht von selbst an. Die
+  // Zugangsdaten stehen NIE im Code, sondern nur in localStorage auf
+  // diesem Gerät (siehe Einstellungen-Karte unten).
+  const NC_CONFIG_KEY = "hoplaner-nextcloud-config";
+  const NC_FOLDER = "Homeoffice-Planer";
+
+  function getNextcloudConfig() {
+    const raw = localStorage.getItem(NC_CONFIG_KEY);
+    if (!raw) return null;
+    try {
+      const config = JSON.parse(raw);
+      if (config.serverUrl && config.username && config.password) return config;
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function buildNextcloudFileUrl(config, year) {
+    const base = config.serverUrl.replace(/\/+$/, ""); // evtl. Schrägstrich am Ende entfernen
+    return base + "/remote.php/dav/files/" + encodeURIComponent(config.username) +
+      "/" + encodeURIComponent(NC_FOLDER) + "/homeoffice-" + year + ".json";
+  }
+
+  // Nextcloud-WebDAV akzeptiert "Basic Auth": Benutzername:Passwort, Base64-
+  // kodiert, als Authorization-Header. btoa() macht in JS genau das (wie
+  // base64.b64encode in Python, nur für Text statt Bytes).
+  function nextcloudAuthHeader(config) {
+    return "Basic " + btoa(config.username + ":" + config.password);
+  }
+
+  // Lädt die Jahres-Datei von Nextcloud. fetch() ist JS' eingebaute Funktion
+  // für Netzwerk-Anfragen (vergleichbar mit Python requests.get/put) - sie
+  // liefert ein "Promise" zurück, deshalb das "await" davor: das bedeutet
+  // "warte hier, bis die Antwort da ist", ähnlich wie ein ganz normaler
+  // blockierender Aufruf in Python, nur dass der Browser nebenbei nicht
+  // einfriert. Jede Funktion, die "await" benutzt, muss selbst mit "async"
+  // markiert sein (siehe "async function").
+  async function fetchYearFromNextcloud(config, year) {
+    const response = await fetch(buildNextcloudFileUrl(config, year), {
+      method: "GET",
+      headers: { Authorization: nextcloudAuthHeader(config) }
+    });
+
+    if (response.status === 404) {
+      return {}; // Für dieses Jahr gibt's noch keine Datei - leer starten
+    }
+    if (!response.ok) {
+      throw new Error("Laden fehlgeschlagen (Status " + response.status + ")");
+    }
+    return await response.json();
+  }
+
+  async function putYearToNextcloud(config, year, yearData) {
+    const response = await fetch(buildNextcloudFileUrl(config, year), {
+      method: "PUT",
+      headers: {
+        Authorization: nextcloudAuthHeader(config),
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(yearData, null, 2)
+    });
+
+    if (!response.ok) {
+      throw new Error("Speichern fehlgeschlagen (Status " + response.status + ")");
+    }
+  }
+
+  // Filtert aus weekData nur die Wochen eines bestimmten Jahres heraus
+  // (weekKey beginnt mit "YYYY-").
+  function extractYearData(year) {
+    const yearData = {};
+    Object.keys(weekData).forEach(function (weekKey) {
+      if (weekKey.slice(0, 4) === String(year)) {
+        yearData[weekKey] = weekData[weekKey];
+      }
+    });
+    return yearData;
+  }
+
+  // Ersetzt in weekData alle Wochen eines Jahres durch die übergebenen Daten.
+  function applyYearData(year, yearData) {
+    Object.keys(weekData).forEach(function (weekKey) {
+      if (weekKey.slice(0, 4) === String(year)) {
+        delete weekData[weekKey];
+      }
+    });
+    Object.assign(weekData, yearData);
+  }
+
+  // Führt die Server-Version und die lokale Version eines Jahres zusammen.
+  // Prinzip: Der Server gewinnt für ALLES - außer für die Zeilen von
+  // "person" (also dich), die kommen von deinem Gerät. So kann ein Gerät
+  // nie versehentlich die Einträge der anderen Person überschreiben, weil
+  // es deren Zeile ja niemals selbst verändert.
+  function mergeYearData(remoteYearData, localYearData, person) {
+    const merged = {};
+
+    Object.keys(remoteYearData || {}).forEach(function (weekKey) {
+      merged[weekKey] = Object.assign({}, remoteYearData[weekKey]);
+    });
+
+    Object.keys(localYearData || {}).forEach(function (weekKey) {
+      const localWeek = localYearData[weekKey];
+      if (!localWeek || !localWeek[person]) return;
+      if (!merged[weekKey]) merged[weekKey] = {};
+      merged[weekKey][person] = localWeek[person];
+    });
+
+    return merged;
+  }
+
+  // Holt die aktuelle Jahres-Datei vom Server, mischt eigene lokale Änderungen
+  // rein und schickt das Ergebnis zurück - benutzt sowohl beim Start (nur
+  // laden+mischen) als auch beim Klick auf "Speichern" (laden+mischen+senden).
+  async function syncYearWithNextcloud(year, alsoUpload) {
+    const config = getNextcloudConfig();
+    if (!config || !currentUser) return;
+
+    const remoteYearData = await fetchYearFromNextcloud(config, year);
+    const localYearData = extractYearData(year);
+    const merged = mergeYearData(remoteYearData, localYearData, currentUser);
+
+    applyYearData(year, merged);
+    saveDataToStorage();
+
+    if (alsoUpload) {
+      await putYearToNextcloud(config, year, merged);
+    }
+
+    renderDayButtons();
+    renderMonthView();
+    renderStats();
+  }
+
+  // ---------- Einstellungen-Formular ----------
+  const ncUrlInput = document.getElementById("nc-url");
+  const ncUsernameInput = document.getElementById("nc-username");
+  const ncPasswordInput = document.getElementById("nc-password");
+  const ncStatus = document.getElementById("nc-status");
+
+  // Ergänzt "https://" davor, falls jemand nur "meinserver.de" einträgt -
+  // ohne Protokoll würde der Browser das sonst als relativen Pfad zur
+  // aktuellen Seite missverstehen statt als eigenständige Adresse.
+  function normalizeServerUrl(url) {
+    if (url && !/^https?:\/\//i.test(url)) {
+      return "https://" + url;
+    }
+    return url;
+  }
+
+  function readSettingsForm() {
+    return {
+      serverUrl: normalizeServerUrl(ncUrlInput.value.trim()),
+      username: ncUsernameInput.value.trim(),
+      password: ncPasswordInput.value
+    };
+  }
+
+  function setNextcloudStatus(text, kind) {
+    ncStatus.textContent = text;
+    ncStatus.className = "settings-status" + (kind ? " " + kind : "");
+  }
+
+  // Beim Start das Formular mit eventuell schon gespeicherten Zugangsdaten füllen.
+  (function fillSettingsForm() {
+    const config = getNextcloudConfig();
+    if (!config) return;
+    ncUrlInput.value = config.serverUrl;
+    ncUsernameInput.value = config.username;
+    ncPasswordInput.value = config.password;
+  })();
+
+  document.getElementById("nc-save-btn").addEventListener("click", function () {
+    const config = readSettingsForm();
+    if (!config.serverUrl || !config.username || !config.password) {
+      setNextcloudStatus("Bitte alle drei Felder ausfüllen.", "error");
+      return;
+    }
+    ncUrlInput.value = config.serverUrl; // zeigt das ergänzte "https://" gleich im Feld an
+    localStorage.setItem(NC_CONFIG_KEY, JSON.stringify(config));
+    setNextcloudStatus("Zugangsdaten gespeichert ✓", "success");
+  });
+
+  document.getElementById("nc-test-btn").addEventListener("click", async function () {
+    const config = readSettingsForm();
+    if (!config.serverUrl || !config.username || !config.password) {
+      setNextcloudStatus("Bitte alle drei Felder ausfüllen.", "error");
+      return;
+    }
+
+    setNextcloudStatus("Teste Verbindung …");
+    try {
+      await fetchYearFromNextcloud(config, new Date().getFullYear());
+      setNextcloudStatus("Verbindung erfolgreich ✓", "success");
+    } catch (error) {
+      console.error(error);
+      setNextcloudStatus("Verbindung fehlgeschlagen: " + error.message, "error");
+    }
+  });
+
+  // ================================================================
+  // Woche: Anzeige, Status-Picker, Tage anklicken
+  // ================================================================
+
+  const dayButtons = document.querySelectorAll(".day-btn");
+  const statusButtons = document.querySelectorAll(".status-btn");
+  const whoButtons = document.querySelectorAll(".who-btn");
+  const saveButton = document.getElementById("save-btn");
+
+  let weekOffset = 0;       // 0 = aktuelle Woche, -1 = letzte Woche, ...
+  let currentWeekKey = "";  // wird in updateWeekDisplay() gesetzt
+  let activeStatus = "homeoffice"; // welcher "Pinsel" ist gerade ausgewählt
+
+  // Wer die App gerade bedient - wird aus dem letzten Mal gemerkt (falls vorhanden).
+  let currentUser = localStorage.getItem(WHO_STORAGE_KEY);
+
+  // Zeichnet die fünf Tag-Buttons passend zum Status der aktuellen Person neu.
+  function renderDayButtons() {
+    if (!currentUser) return; // niemand ausgewählt -> nichts anzuzeigen
+
+    const week = getOrCreatePersonWeek(currentWeekKey, currentUser);
+    let anyHalfDay = false;
+
+    dayButtons.forEach(function (button) {
+      const day = button.dataset.day; // liest data-day="Mo" usw. aus
+      const status = week[day];
+      const date = dateForWeekdayInWeek(currentWeekKey, day);
+
+      // Erst alle möglichen Status-Klassen entfernen, dann die passende
+      // wieder hinzufügen - so bleibt immer nur eine aktiv.
+      button.classList.remove("status-homeoffice", "status-urlaub", "status-gleitzeit", "status-krank", "status-feiertag");
+      if (status !== "buero") {
+        button.classList.add("status-" + status);
+      }
+
+      // Feiertage (gesetzlich oder persönlich, z.B. Simones Heiligabend)
+      // dürfen nicht überschrieben werden - Button komplett sperren.
+      button.disabled = isHolidayLockedForPerson(date, currentUser);
+
+      // Heiligabend/Silvester: nur ein Hinweis-Badge, ändert den Status nicht.
+      const isHalfDay = isHalfDayForCurrentUser(date);
+      button.classList.toggle("half-day", isHalfDay);
+      if (isHalfDay) anyHalfDay = true;
+    });
+
+    document.getElementById("half-day-note").style.display = anyHalfDay ? "block" : "none";
+  }
+
+  // Ein Tag-Button wurde angeklickt: Status setzen oder (falls schon gesetzt)
+  // zurück auf den natürlichen Standard des Tages ("buero" oder "feiertag").
+  dayButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      const day = button.dataset.day;
+      const week = getOrCreatePersonWeek(currentWeekKey, currentUser);
+      const date = dateForWeekdayInWeek(currentWeekKey, day);
+
+      if (week[day] === activeStatus) {
+        week[day] = getDefaultStatus(date, currentUser);
+      } else {
+        week[day] = activeStatus;
+      }
+
+      renderDayButtons();
+      renderMonthView(); // Monatsübersicht spiegelt sofort die neue Auswahl
+      renderStats();      // und die kumulierte Auswertung
+    });
+  });
+
+  // Ein Status-Button ("Pinsel") wurde angeklickt: er wird der neue aktive Status.
+  statusButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      activeStatus = button.dataset.status;
+
+      statusButtons.forEach(function (b) {
+        b.classList.remove("active");
+      });
+      button.classList.add("active");
+    });
+  });
+
+  // "Wer bist du?"-Button angeklickt: Person merken und alles neu zeichnen.
+  whoButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      currentUser = button.dataset.who;
+      localStorage.setItem(WHO_STORAGE_KEY, currentUser);
+
+      updateWhoButtons();
+      setEditingEnabled(true);
+      renderDayButtons();
+      renderMonthView();
+      renderStats();
+
+      backgroundSyncCurrentYear(); // holt nebenbei den neuesten Stand von Nextcloud
+    });
+  });
+
+  // Lädt (ohne hochzuladen) im Hintergrund die Jahres-Datei des aktuell
+  // angezeigten Jahres, falls Nextcloud eingerichtet ist. "Hintergrund"
+  // heißt: wir warten hier nicht drauf (kein await), die Oberfläche bleibt
+  // sofort nutzbar und aktualisiert sich einfach neu, sobald die Antwort da ist.
+  function backgroundSyncCurrentYear() {
+    if (!currentUser || !currentWeekKey || !getNextcloudConfig()) return;
+
+    syncYearWithNextcloud(currentWeekKey.slice(0, 4), false).catch(function (error) {
+      console.error("Nextcloud-Hintergrund-Sync fehlgeschlagen:", error);
+    });
+  }
+
+  function updateWhoButtons() {
+    whoButtons.forEach(function (button) {
+      button.classList.toggle("active", button.dataset.who === currentUser);
+    });
+  }
+
+  // Solange niemand ausgewählt ist, ergibt Tage-anklicken/Speichern keinen
+  // Sinn (wir wüssten nicht, wessen Zeile gemeint ist) - Buttons sperren.
+  function setEditingEnabled(enabled) {
+    dayButtons.forEach(function (b) { b.disabled = !enabled; });
+    statusButtons.forEach(function (b) { b.disabled = !enabled; });
+    saveButton.disabled = !enabled;
+  }
+
+  // Speichern-Button: sichert zuerst lokal (schnell, funktioniert immer),
+  // und synchronisiert danach - falls eingerichtet - mit Nextcloud.
+  // "async function" + "await" siehe Erklärung weiter oben bei fetch().
+  let saveStatusTimeout;
+  const saveStatusText = document.getElementById("save-status");
+
+  saveButton.addEventListener("click", async function () {
+    saveDataToStorage();
+
+    const config = getNextcloudConfig();
+    if (!config) {
+      saveStatusText.textContent = "Gespeichert ✓ (nur lokal)";
+    } else {
+      saveStatusText.textContent = "Speichert mit Nextcloud …";
+      try {
+        await syncYearWithNextcloud(currentWeekKey.slice(0, 4), true);
+        saveStatusText.textContent = "Gespeichert ✓ (mit Nextcloud synchronisiert)";
+      } catch (error) {
+        console.error("Nextcloud-Sync beim Speichern fehlgeschlagen:", error);
+        saveStatusText.textContent = "Lokal gespeichert, Nextcloud-Fehler ⚠";
+      }
+    }
+
+    clearTimeout(saveStatusTimeout);
+    saveStatusTimeout = setTimeout(function () {
+      saveStatusText.textContent = "";
+    }, 3500);
+  });
+
+  function updateWeekDisplay() {
+    const today = new Date();
+    const monday = getMonday(today);
+    // 7 Tage mal Offset draufrechnen, um in der Zeit vor/zurück zu springen
+    monday.setDate(monday.getDate() + weekOffset * 7);
+
+    const friday = new Date(monday);
+    friday.setDate(monday.getDate() + 4);
+
+    document.getElementById("week-range").textContent =
+      formatDayMonth(monday) + " – " + formatDayMonth(friday);
+
+    // "Zur aktuellen Woche"-Link nur zeigen, wenn wir woanders hingeblättert haben
+    document.getElementById("jump-today").style.display =
+      weekOffset === 0 ? "none" : "block";
+
+    currentWeekKey = formatISODate(monday);
+    renderDayButtons();
+
+    // Monatsübersicht + Auswertung an den Monat der angezeigten Woche
+    // koppeln (nach dem Monat des Montags), damit man beim Wochen-Blättern
+    // nicht zusätzlich noch den Monat von Hand umschalten muss.
+    monthOffset = (monday.getFullYear() - today.getFullYear()) * 12 + (monday.getMonth() - today.getMonth());
+    renderMonthView();
+    renderStats();
+  }
+
+  document.getElementById("prev-week").addEventListener("click", function () {
+    weekOffset = weekOffset - 1;
+    updateWeekDisplay();
+  });
+
+  document.getElementById("next-week").addEventListener("click", function () {
+    weekOffset = weekOffset + 1;
+    updateWeekDisplay();
+  });
+
+  document.getElementById("jump-today").addEventListener("click", function () {
+    weekOffset = 0;
+    updateWeekDisplay();
+  });
+
+  // ================================================================
+  // Monatsübersicht
+  // ================================================================
+
+  let monthOffset = 0; // 0 = aktueller Monat, -1 = letzter Monat, ...
+
+  // Liefert Jahr + Monat, die gerade wegen monthOffset angezeigt werden.
+  // Sowohl die Monatsübersicht als auch die Auswertung (Schritt "Statistik")
+  // greifen auf diese eine Stelle zurück, damit beide immer zum selben Monat passen.
+  function getTargetMonthDate() {
+    const base = new Date();
+    const targetDate = new Date(base.getFullYear(), base.getMonth() + monthOffset, 1);
+    return { year: targetDate.getFullYear(), month: targetDate.getMonth() };
+  }
+
+  // Baut eine Liste aller Kalendertage, die im Raster zu sehen sein sollen -
+  // vom Montag vor (oder am) 1. des Monats bis zum Sonntag nach (oder am) letzten Tag.
+  // So bleibt das Raster immer ein sauberes Vielfaches von 7 Tagen.
+  function buildMonthGrid(year, month) {
+    const firstOfMonth = new Date(year, month, 1);
+    const lastOfMonth = new Date(year, month + 1, 0); // Tag 0 des Folgemonats = letzter Tag hier
+
+    const start = getMonday(firstOfMonth);
+
+    const end = new Date(lastOfMonth);
+    const endWeekday = end.getDay();
+    const daysUntilSunday = endWeekday === 0 ? 0 : 7 - endWeekday;
+    end.setDate(end.getDate() + daysUntilSunday);
+
+    const days = [];
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      days.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return days;
+  }
+
+  function renderMonthView() {
+    const target = getTargetMonthDate();
+    const year = target.year;
+    const month = target.month;
+
+    document.getElementById("month-label").textContent = MONTH_NAMES[month] + " " + year;
+
+    const grid = document.getElementById("month-grid");
+    grid.innerHTML = ""; // vorherigen Inhalt leeren, bevor wir neu befüllen
+
+    // Kopfzeile mit den Wochentag-Kürzeln
+    ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].forEach(function (label) {
+      const headerCell = document.createElement("div");
+      headerCell.className = "month-weekday";
+      headerCell.textContent = label;
+      grid.appendChild(headerCell);
+    });
+
+    const days = buildMonthGrid(year, month);
+
+    days.forEach(function (date) {
+      const cell = document.createElement("div");
+      cell.className = "month-cell";
+
+      const isOutsideMonth = date.getMonth() !== month;
+      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+      if (isOutsideMonth) cell.classList.add("outside");
+      if (isWeekend) cell.classList.add("weekend");
+
+      const dayNumber = document.createElement("span");
+      dayNumber.textContent = date.getDate();
+      cell.appendChild(dayNumber);
+
+      // Den Punkt IMMER erzeugen (auch am Wochenende / ohne Status), damit
+      // jede Kachel gleich hoch ist und die Zahl nicht herumspringt.
+      // Ohne Status bleibt er dank CSS einfach unsichtbar (opacity: 0).
+      const status = getStatusForDate(date, currentUser);
+      const statusDot = document.createElement("span");
+      statusDot.className = "status-dot";
+      if (status && status !== "buero") {
+        statusDot.classList.add("status-" + status);
+      }
+      cell.appendChild(statusDot);
+
+      grid.appendChild(cell);
+    });
+  }
+
+  document.getElementById("prev-month").addEventListener("click", function () {
+    monthOffset = monthOffset - 1;
+    renderMonthView();
+    renderStats();
+  });
+
+  document.getElementById("next-month").addEventListener("click", function () {
+    monthOffset = monthOffset + 1;
+    renderMonthView();
+    renderStats();
+  });
+
+  // ================================================================
+  // Auswertung (kumulierte Monats-/Jahresübersicht)
+  // ================================================================
+
+  // Liefert alle Werktage (Mo-Fr) eines Monats - optional gedeckelt auf ein
+  // "bis einschließlich"-Datum, damit der laufende Monat nicht in die
+  // Zukunft mitzählt (siehe renderStats).
+  function datesInMonth(year, month, cutoffDate) {
+    const dates = [];
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day);
+      const weekday = date.getDay();
+      if (weekday === 0 || weekday === 6) continue; // Wochenende zählt nicht
+      if (cutoffDate && date > cutoffDate) continue;
+      dates.push(date);
+    }
+    return dates;
+  }
+
+  // Dasselbe für ein ganzes Jahr - einfach alle zwölf Monate aneinanderhängen.
+  function datesInYear(year, cutoffDate) {
+    let dates = [];
+    for (let month = 0; month < 12; month++) {
+      dates = dates.concat(datesInMonth(year, month, cutoffDate));
+    }
+    return dates;
+  }
+
+  // Zählt für jede Person, wie oft jeder Status an den übergebenen Tagen
+  // vorkommt. Nutzt getStatusForDate() - dieselbe Funktion, die auch die
+  // Monatsübersicht verwendet - damit Feiertage/Standardwerte überall
+  // gleich behandelt werden, unabhängig davon, ob die jeweilige Woche
+  // schon einmal in der "Woche"-Karte geöffnet und damit gespeichert wurde.
+  function computeStats(dates) {
+    const stats = {};
+    PEOPLE.forEach(function (person) {
+      stats[person] = { buero: 0, homeoffice: 0, urlaub: 0, gleitzeit: 0, krank: 0, feiertag: 0 };
+    });
+
+    dates.forEach(function (date) {
+      PEOPLE.forEach(function (person) {
+        const status = getStatusForDate(date, person);
+        stats[person][status] = stats[person][status] + 1;
+      });
+    });
+
+    return stats;
+  }
+
+  const STATUS_ROWS = [
+    { key: "buero", label: "Büro" },
+    { key: "homeoffice", label: "Homeoffice" },
+    { key: "urlaub", label: "Urlaub" },
+    { key: "gleitzeit", label: "Gleitzeit" },
+    { key: "krank", label: "Krank" },
+    { key: "feiertag", label: "Feiertag" }
+  ];
+
+  let statsRange = "month"; // "month" oder "year" - welcher Reiter ist aktiv
+
+  function renderStats() {
+    const target = getTargetMonthDate(); // folgt derselben Monatsnavigation wie oben
+
+    // Auf Mitternacht setzen, damit der Vergleich "liegt date in der Zukunft?"
+    // unabhängig von der aktuellen Uhrzeit funktioniert.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let stats;
+    let periodLabel;
+
+    if (statsRange === "month") {
+      // Nur beim gerade laufenden Monat auf "heute" deckeln - bei einem
+      // vergangenen Monat soll weiterhin der komplette Monat gezählt werden.
+      const isCurrentMonth = target.year === today.getFullYear() && target.month === today.getMonth();
+      const dates = datesInMonth(target.year, target.month, isCurrentMonth ? today : null);
+
+      stats = computeStats(dates);
+      periodLabel = MONTH_NAMES[target.month] + " " + target.year;
+    } else {
+      const isCurrentYear = target.year === today.getFullYear();
+      const dates = datesInYear(target.year, isCurrentYear ? today : null);
+
+      stats = computeStats(dates);
+      periodLabel = "Jahr " + target.year;
+    }
+
+    document.getElementById("stats-period").textContent = periodLabel;
+
+    const table = document.getElementById("stats-table");
+    table.innerHTML = ""; // vorherigen Inhalt leeren, bevor wir neu befüllen
+
+    // Kopfzeile: linke Ecke leer, dann ein Name pro Person
+    const corner = document.createElement("div");
+    table.appendChild(corner);
+
+    PEOPLE.forEach(function (person) {
+      const header = document.createElement("div");
+      header.className = "stats-header";
+      header.textContent = person;
+      table.appendChild(header);
+    });
+
+    // Eine Zeile pro Status
+    STATUS_ROWS.forEach(function (row) {
+      const labelCell = document.createElement("div");
+      labelCell.className = "stats-label";
+
+      const dot = document.createElement("span");
+      dot.className = "dot status-" + row.key;
+      labelCell.appendChild(dot);
+
+      const text = document.createElement("span");
+      text.textContent = row.label;
+      labelCell.appendChild(text);
+
+      table.appendChild(labelCell);
+
+      PEOPLE.forEach(function (person) {
+        const valueCell = document.createElement("div");
+        valueCell.className = "stats-value";
+        valueCell.textContent = stats[person][row.key];
+        table.appendChild(valueCell);
+      });
+    });
+
+    // Summenzeile: Büro + Homeoffice zählen als "gearbeitet",
+    // Urlaub/Gleitzeit/Krank nicht.
+    const totalLabel = document.createElement("div");
+    totalLabel.className = "stats-label stats-total-row";
+    totalLabel.textContent = "Gesamt gearbeitete Tage";
+    table.appendChild(totalLabel);
+
+    PEOPLE.forEach(function (person) {
+      const total = stats[person].buero + stats[person].homeoffice;
+      const totalValue = document.createElement("div");
+      totalValue.className = "stats-value stats-total-row";
+      totalValue.textContent = total;
+      table.appendChild(totalValue);
+    });
+  }
+
+  document.querySelectorAll(".stats-tab").forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      statsRange = tab.dataset.range;
+
+      document.querySelectorAll(".stats-tab").forEach(function (t) {
+        t.classList.remove("active");
+      });
+      tab.classList.add("active");
+
+      renderStats();
+    });
+  });
+
+  // ================================================================
+  // Start: gespeicherte Daten laden, dann aktuelle Woche + Monat anzeigen
+  // ================================================================
+  loadDataFromStorage();
+  updateWhoButtons();
+  setEditingEnabled(!!currentUser); // !! wandelt "Daniel"/null in true/false um
+
+  // updateWeekDisplay() stößt Monatsübersicht + Auswertung gleich mit an
+  updateWeekDisplay();
+
+  // Falls Nextcloud eingerichtet ist, gleich beim Öffnen im Hintergrund den
+  // neuesten Stand holen (z.B. was die andere Person seither eingetragen hat).
+  backgroundSyncCurrentYear();
+</script>
+
+</body>
+</html>
